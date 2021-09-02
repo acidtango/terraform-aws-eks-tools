@@ -1,0 +1,17 @@
+{
+  "extends": [
+    "config:base"
+  ],
+  "schedule": ["after 7pm and before 7am"],
+  "prConcurrentLimit": 2,
+  "dependencyDashboard": true,
+  "packageRules": [
+    {
+      "matchPackageNames": [
+        "hashicorp/terraform",
+        "aws"
+      ],
+      "extends": ["schedule:monthly"]
+    }
+  ]
+}
