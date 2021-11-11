@@ -18,3 +18,15 @@ variable "iam_oidc_provider_url" {
 variable "domain" {
   description = "domain for external dns to listen for changes"
 }
+
+variable "enable-metrics" {
+  description = "A conditional indicator to enable container insights metrics"
+  type        = bool
+  default     = true
+}
+
+variable "enable-logs" {
+  description = "A conditional indicator to enable container insights logs"
+  type        = bool
+  default     = true
+}
