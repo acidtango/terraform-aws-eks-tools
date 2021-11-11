@@ -51,10 +51,9 @@ module "container-insights" {
     url = replace(var.iam_oidc_provider_url, "https://", "")
     arn = var.iam_oidc_provider_arn
   }
-  # TODO: temporary solution until we reimplement container insights enable toggle
   features = {
-    enable_metrics = true
-    enable_logs    = true
+    enable_metrics = var.enable-metrics
+    enable_logs    = var.enable-logs
   }
 }
 
