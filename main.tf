@@ -28,7 +28,7 @@ module "alb_controller" {
 
 module "external_dns" {
   source  = "lablabs/eks-external-dns/aws"
-  version = "0.6.1"
+  version = "0.8.1"
 
   cluster_name                     = data.aws_eks_cluster.eks-cluster.name
   cluster_identity_oidc_issuer     = data.aws_eks_cluster.eks-cluster.identity[0].oidc[0].issuer
@@ -44,12 +44,17 @@ module "external_dns" {
 
 module "container-insights" {
   source  = "Young-ook/eks/aws//modules/container-insights"
-  version = "1.5.0"
+  version = "1.6.0"
 
   cluster_name = data.aws_eks_cluster.eks-cluster.name
   oidc = {
     url = replace(var.iam_oidc_provider_url, "https://", "")
     arn = var.iam_oidc_provider_arn
+  }
+  # TODO: temporary solution until we reimplement container insights enable toggle
+  features = {
+    enable_metrics = true
+    enable_logs    = true
   }
 }
 
@@ -58,7 +63,7 @@ module "container-insights" {
 
 module "metrics-server" {
   source  = "Young-ook/eks/aws//modules/metrics-server"
-  version = "1.5.0"
+  version = "1.6.0"
 
   cluster_name = data.aws_eks_cluster.eks-cluster.name
   oidc = {
@@ -72,7 +77,7 @@ module "metrics-server" {
 
 module "cluster-autoscaler" {
   source  = "Young-ook/eks/aws//modules/cluster-autoscaler"
-  version = "1.5.0"
+  version = "1.6.0"
 
   cluster_name = data.aws_eks_cluster.eks-cluster.name
   oidc = {
