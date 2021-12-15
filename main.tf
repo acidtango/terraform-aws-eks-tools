@@ -84,3 +84,11 @@ module "cluster-autoscaler" {
     arn = var.iam_oidc_provider_arn
   }
 }
+
+
+// AWS Ingress Nginx Controller Installation
+
+module "eks-ingress-nginx" {
+  source  = "lablabs/eks-ingress-nginx/aws"
+  version = "0.4.1"
+}
