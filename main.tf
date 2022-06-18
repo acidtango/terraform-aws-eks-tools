@@ -43,7 +43,7 @@ module "external_dns" {
 
 module "container-insights" {
   source  = "Young-ook/eks/aws//modules/container-insights"
-  version = "1.6.0"
+  version = "1.7.5"
 
   cluster_name = data.aws_eks_cluster.eks-cluster.name
   oidc = {
@@ -61,7 +61,7 @@ module "container-insights" {
 
 module "metrics-server" {
   source  = "Young-ook/eks/aws//modules/metrics-server"
-  version = "1.6.0"
+  version = "1.7.5"
 
   cluster_name = data.aws_eks_cluster.eks-cluster.name
   oidc = {
@@ -75,7 +75,7 @@ module "metrics-server" {
 
 module "cluster-autoscaler" {
   source  = "Young-ook/eks/aws//modules/cluster-autoscaler"
-  version = "1.6.0"
+  version = "1.7.5"
 
   cluster_name = data.aws_eks_cluster.eks-cluster.name
   oidc = {
