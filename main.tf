@@ -28,7 +28,7 @@ module "alb_controller" {
 
 module "external_dns" {
   source  = "lablabs/eks-external-dns/aws"
-  version = "1.0.0"
+  version = "1.1.0"
 
   cluster_identity_oidc_issuer     = data.aws_eks_cluster.eks-cluster.identity[0].oidc[0].issuer
   cluster_identity_oidc_issuer_arn = var.iam_oidc_provider_arn
