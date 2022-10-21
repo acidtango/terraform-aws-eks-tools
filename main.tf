@@ -6,21 +6,25 @@ data "aws_eks_cluster" "eks-cluster" {
   name = var.eks_cluster_name
 }
 
+locals {
+  oidc = {
+    url = replace(var.iam_oidc_provider_url, "https://", "")
+    arn = var.iam_oidc_provider_arn
+  }
+}
 
 // AWS Load Balancer Controller Installation
 
 module "alb_controller" {
-  source = "git::https://github.com/GSA/terraform-kubernetes-aws-load-balancer-controller?ref=v4.2.0gsa"
+  source  = "Young-ook/eks/aws//modules/lb-controller"
+  version = "1.7.10"
 
-  k8s_cluster_type = "eks"
-  k8s_namespace    = "kube-system"
-
-  aws_region_name  = data.aws_region.current.name
-  k8s_cluster_name = data.aws_eks_cluster.eks-cluster.name
-
-  alb_controller_depends_on = [
-    var.alb_controller_depends_on
-  ]
+  oidc = local.oidc
+  helm = {
+    vars = {
+      clusterName = var.eks_cluster_name
+    }
+  }
 }
 
 
@@ -43,13 +47,10 @@ module "external_dns" {
 
 module "container-insights" {
   source  = "Young-ook/eks/aws//modules/container-insights"
-  version = "1.6.0"
+  version = "1.7.10"
 
   cluster_name = data.aws_eks_cluster.eks-cluster.name
-  oidc = {
-    url = replace(var.iam_oidc_provider_url, "https://", "")
-    arn = var.iam_oidc_provider_arn
-  }
+  oidc = local.oidc
   features = {
     enable_metrics = var.enable-metrics
     enable_logs    = var.enable-logs
@@ -61,12 +62,11 @@ module "container-insights" {
 
 module "metrics-server" {
   source  = "Young-ook/eks/aws//modules/metrics-server"
-  version = "1.6.0"
+  version = "1.7.10"
 
-  cluster_name = data.aws_eks_cluster.eks-cluster.name
-  oidc = {
-    url = replace(var.iam_oidc_provider_url, "https://", "")
-    arn = var.iam_oidc_provider_arn
+  oidc = local.oidc
+  helm = {
+    repository = "https://kubernetes-sigs.github.io/metrics-server/"
   }
 }
 
@@ -75,11 +75,7 @@ module "metrics-server" {
 
 module "cluster-autoscaler" {
   source  = "Young-ook/eks/aws//modules/cluster-autoscaler"
-  version = "1.6.0"
+  version = "1.7.10"
 
-  cluster_name = data.aws_eks_cluster.eks-cluster.name
-  oidc = {
-    url = replace(var.iam_oidc_provider_url, "https://", "")
-    arn = var.iam_oidc_provider_arn
-  }
+  oidc = local.oidc
 }
