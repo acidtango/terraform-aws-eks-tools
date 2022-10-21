@@ -65,6 +65,9 @@ module "metrics-server" {
   version = "1.7.10"
 
   oidc = local.oidc
+  helm = {
+    repository = "https://kubernetes-sigs.github.io/metrics-server/"
+  }
 }
 
 
