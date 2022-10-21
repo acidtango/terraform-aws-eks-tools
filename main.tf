@@ -20,6 +20,11 @@ module "alb_controller" {
   version = "1.7.10"
 
   oidc = local.oidc
+  helm = {
+    vars = {
+      clusterName = var.eks_cluster_name
+    }
+  }
 }
 
 
