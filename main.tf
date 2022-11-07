@@ -81,6 +81,8 @@ module "cluster-autoscaler" {
   helm = {
     vars = {
       "autoDiscovery.clusterName" = data.aws_eks_cluster.eks-cluster.name
+      "resources.limits.memory" = "768Mi"
+      "resources.requests.memory" = "768Mi"
     }
   }
 }
