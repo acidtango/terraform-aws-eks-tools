@@ -78,4 +78,9 @@ module "cluster-autoscaler" {
   version = "1.7.10"
 
   oidc = local.oidc
+  helm = {
+    vars = {
+      "autoDiscovery.clusterName" = data.aws_eks_cluster.eks-cluster.name
+    }
+  }
 }
