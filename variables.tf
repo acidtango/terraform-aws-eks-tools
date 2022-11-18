@@ -26,3 +26,7 @@ variable "enable-logs" {
   type        = bool
   default     = true
 }
+
+variable "eks-node-group-iam-role-name" {
+  description = "karpenter needs the node group iam role to create new nodes"
+}
