@@ -162,6 +162,10 @@ resource "kubectl_manifest" "karpenter_provisioner" {
   metadata:
     name: default
   spec:
+    consolidation:
+      enabled: true
+    ttlSecondsUntilExpired: 604800
+    ttlSecondsAfterEmpty: 30
     requirements:
       - key: "node.kubernetes.io/instance-type"
         operator: In
@@ -176,7 +180,6 @@ resource "kubectl_manifest" "karpenter_provisioner" {
       instanceProfile: KarpenterNodeInstanceProfile-${var.eks_cluster_name}
       subnetSelector:
         Tier: Private
-    ttlSecondsAfterEmpty: 30
   YAML
 
   depends_on = [
