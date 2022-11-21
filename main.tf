@@ -93,7 +93,7 @@ module "iam_assumable_role_karpenter" {
   source                        = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
   version                       = "4.7.0"
   create_role                   = true
-  role_name                     = "karpenter-controller-${var.eks_cluster_name}"
+  role_name                     = substr("karpenter-controller-${var.eks_cluster_name}", 0, 64)
   provider_url                  = local.oidc.url
   oidc_fully_qualified_subjects = ["system:serviceaccount:karpenter:karpenter"]
 }
