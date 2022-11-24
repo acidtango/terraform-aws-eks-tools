@@ -168,15 +168,12 @@ resource "kubectl_manifest" "karpenter_provisioner" {
     ttlSecondsUntilExpired: 604800
     ttlSecondsAfterEmpty: 30
     requirements:
-      - key: "node.kubernetes.io/instance-type"
-        operator: In
-        values: ["t3a.small", "t3.small", "t3a.medium", "t3.medium"]
       - key: karpenter.sh/capacity-type
         operator: In
         values: ["spot", "on-demand"]
     limits:
       resources:
-        cpu: 16
+        cpu: 32
     provider:
       instanceProfile: KarpenterNodeInstanceProfile-${var.eks_cluster_name}
       subnetSelector:
