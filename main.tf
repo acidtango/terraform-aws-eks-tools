@@ -156,6 +156,7 @@ resource "helm_release" "karpenter" {
 }
 
 # Workaround - https://github.com/hashicorp/terraform-provider-kubernetes/issues/1380#issuecomment-967022975
+# Use all instance types as fallback and default
 resource "kubectl_manifest" "karpenter_provisioner" {
   yaml_body = <<-YAML
   apiVersion: karpenter.sh/v1alpha5
@@ -167,7 +168,46 @@ resource "kubectl_manifest" "karpenter_provisioner" {
       enabled: true
     ttlSecondsUntilExpired: 604800
     ttlSecondsAfterEmpty: 30
+    weight: 0
     requirements:
+      - key: karpenter.sh/capacity-type
+        operator: In
+        values: ["spot", "on-demand"]
+      - key: "kubernetes.io/arch"
+        operator: In
+        values: ["arm64", "amd64"]
+    limits:
+      resources:
+        cpu: 32
+    provider:
+      instanceProfile: KarpenterNodeInstanceProfile-${var.eks_cluster_name}
+      subnetSelector:
+        Tier: Private
+  YAML
+
+  depends_on = [
+    helm_release.karpenter
+  ]
+}
+
+# See: https://github.com/aws/karpenter/issues/2916#issuecomment-1351278527
+# provisioner with cheapest instance types
+resource "kubectl_manifest" "karpenter_provisioner_cheap" {
+  yaml_body = <<-YAML
+  apiVersion: karpenter.sh/v1alpha5
+  kind: Provisioner
+  metadata:
+    name: cheap-instances
+  spec:
+    consolidation:
+      enabled: true
+    ttlSecondsUntilExpired: 604800
+    ttlSecondsAfterEmpty: 30
+    weight: 100
+    requirements:
+      - key: "node.kubernetes.io/instance-type"
+        operator: In
+        values: ["t3a.small", "t3.small"]
       - key: karpenter.sh/capacity-type
         operator: In
         values: ["spot", "on-demand"]
