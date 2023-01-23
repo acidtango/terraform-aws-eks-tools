@@ -27,6 +27,6 @@ variable "enable-logs" {
   default     = true
 }
 
-variable "eks-node-group-iam-role-name" {
-  description = "karpenter needs the node group iam role to create new nodes"
+variable "eks-node-group-iam-role-arn" {
+  description = "karpenter needs the node group iam role arn to create new nodes"
 }
