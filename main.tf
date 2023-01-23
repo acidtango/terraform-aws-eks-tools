@@ -67,157 +67,147 @@ module "metrics-server" {
   oidc = local.oidc
   helm = {
     repository = "https://kubernetes-sigs.github.io/metrics-server/"
-    version = "3.8.2"
+    version    = "3.8.2"
   }
 }
 
 
 // Karpenter Installation
-// Inspired from: https://karpenter.sh/v0.5.3/getting-started-with-terraform/
-// and from: https://github.com/terraform-aws-modules/terraform-aws-eks/blob/v18.30.3/examples/karpenter/main.tf
+// Inspired from: https://karpenter.sh/v0.22.1/getting-started/getting-started-with-terraform/
 
-data "aws_iam_policy" "ssm_managed_instance" {
-  arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+module "karpenter" {
+  source  = "terraform-aws-modules/eks/aws//modules/karpenter"
+  version = "19.5.1"
+
+  cluster_name = var.eks_cluster_name
+
+  irsa_oidc_provider_arn          = var.iam_oidc_provider_arn
+  irsa_namespace_service_accounts = ["karpenter:karpenter"]
+
+  # Since Karpenter is running on an EKS Managed Node group,
+  # we can re-use the role that was created for the node group
+  create_iam_role = false
+  iam_role_arn    = var.eks-node-group-iam-role-arn
+
+  create_irsa = true
+  # due to names too long we need to provide short ones
+  irsa_name = substr("KarpenterIRSA-${var.eks_cluster_name}", 0, 37)
 }
 
-resource "aws_iam_role_policy_attachment" "karpenter_ssm_policy" {
-  role       = var.eks-node-group-iam-role-name
-  policy_arn = data.aws_iam_policy.ssm_managed_instance.arn
+provider "aws" {
+  region = "us-east-1"
+  alias  = "virginia"
 }
 
-resource "aws_iam_instance_profile" "karpenter" {
-  name = "KarpenterNodeInstanceProfile-${var.eks_cluster_name}"
-  role = var.eks-node-group-iam-role-name
-}
-
-module "iam_assumable_role_karpenter" {
-  source                        = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
-  version                       = "4.7.0"
-  create_role                   = true
-  role_name                     = substr("karpenter-controller-${var.eks_cluster_name}", 0, 64)
-  provider_url                  = local.oidc.url
-  oidc_fully_qualified_subjects = ["system:serviceaccount:karpenter:karpenter"]
-}
-
-resource "aws_iam_role_policy" "karpenter_controller" {
-  name = "karpenter-policy-${var.eks_cluster_name}"
-  role = module.iam_assumable_role_karpenter.iam_role_name
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = [
-          "ec2:CreateLaunchTemplate",
-          "ec2:CreateFleet",
-          "ec2:RunInstances",
-          "ec2:CreateTags",
-          "iam:PassRole",
-          "ec2:TerminateInstances",
-          "ec2:DescribeLaunchTemplates",
-          "ec2:DescribeInstances",
-          "ec2:DescribeSecurityGroups",
-          "ec2:DescribeSubnets",
-          "ec2:DescribeInstanceTypes",
-          "ec2:DescribeInstanceTypeOfferings",
-          "ec2:DescribeAvailabilityZones",
-          "ssm:GetParameter"
-        ]
-        Effect   = "Allow"
-        Resource = "*"
-      },
-    ]
-  })
+data "aws_ecrpublic_authorization_token" "token" {
+  provider = aws.virginia
 }
 
 resource "helm_release" "karpenter" {
   namespace        = "karpenter"
   create_namespace = true
 
-  name       = "karpenter"
-  repository = "https://charts.karpenter.sh"
-  chart      = "karpenter"
-  version    = "v0.5.3"
+  name                = "karpenter"
+  repository          = "oci://public.ecr.aws/karpenter"
+  repository_username = data.aws_ecrpublic_authorization_token.token.user_name
+  repository_password = data.aws_ecrpublic_authorization_token.token.password
+  chart               = "karpenter"
+  version             = "v0.22.1"
 
   set {
-    name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
-    value = module.iam_assumable_role_karpenter.iam_role_arn
-  }
-
-  set {
-    name  = "controller.clusterName"
+    name  = "settings.aws.clusterName"
     value = var.eks_cluster_name
   }
 
   set {
-    name  = "controller.clusterEndpoint"
+    name  = "settings.aws.clusterEndpoint"
     value = data.aws_eks_cluster.eks-cluster.endpoint
+  }
+
+  set {
+    name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
+    value = module.karpenter.irsa_arn
+  }
+
+  set {
+    name  = "settings.aws.defaultInstanceProfile"
+    value = module.karpenter.instance_profile_name
+  }
+
+  set {
+    name  = "settings.aws.interruptionQueueName"
+    value = module.karpenter.queue_name
   }
 }
 
 # Workaround - https://github.com/hashicorp/terraform-provider-kubernetes/issues/1380#issuecomment-967022975
 # Use all instance types as fallback and default
-resource "kubectl_manifest" "karpenter_provisioner" {
-  yaml_body = <<-YAML
-  apiVersion: karpenter.sh/v1alpha5
-  kind: Provisioner
-  metadata:
-    name: default
-  spec:
-    consolidation:
-      enabled: true
-    ttlSecondsUntilExpired: 604800
-    ttlSecondsAfterEmpty: 30
-    weight: 0
-    requirements:
-      - key: karpenter.sh/capacity-type
-        operator: In
-        values: ["spot", "on-demand"]
-      - key: "kubernetes.io/arch"
-        operator: In
-        values: ["arm64", "amd64"]
-    limits:
-      resources:
-        cpu: 32
-    provider:
-      instanceProfile: KarpenterNodeInstanceProfile-${var.eks_cluster_name}
-      subnetSelector:
-        Tier: Private
-  YAML
-
-  depends_on = [
-    helm_release.karpenter
-  ]
-}
+#resource "kubectl_manifest" "karpenter_provisioner" {
+#  yaml_body = <<-YAML
+#    apiVersion: karpenter.sh/v1alpha5
+#    kind: Provisioner
+#    metadata:
+#      name: default
+#    spec:
+#      weight: 0
+#      ttlSecondsUntilExpired: 604800
+#      ttlSecondsAfterEmpty: 30
+#      requirements:
+#        - key: karpenter.sh/capacity-type
+#          operator: In
+#          values: ["spot", "on-demand"]
+#        - key: "kubernetes.io/arch"
+#          operator: In
+#          values: ["arm64", "amd64"]
+#      limits:
+#        resources:
+#          cpu: 32
+#      provider:
+#        subnetSelector:
+#          karpenter.sh/discovery: "true"
+#        securityGroupSelector:
+#          aws-ids: ${data.aws_eks_cluster.eks-cluster.vpc_config[0].cluster_security_group_id}
+#        tags:
+#          karpenter.sh/discovery: ${var.eks_cluster_name}
+#  YAML
+#
+#  depends_on = [
+#    helm_release.karpenter
+#  ]
+#}
 
 # See: https://github.com/aws/karpenter/issues/2916#issuecomment-1351278527
 # provisioner with cheapest instance types
 resource "kubectl_manifest" "karpenter_provisioner_cheap" {
   yaml_body = <<-YAML
-  apiVersion: karpenter.sh/v1alpha5
-  kind: Provisioner
-  metadata:
-    name: cheap-instances
-  spec:
-    consolidation:
-      enabled: true
-    ttlSecondsUntilExpired: 604800
-    ttlSecondsAfterEmpty: 30
-    weight: 100
-    requirements:
-      - key: "node.kubernetes.io/instance-type"
-        operator: In
-        values: ["t3a.small", "t3.small"]
-      - key: karpenter.sh/capacity-type
-        operator: In
-        values: ["spot", "on-demand"]
-    limits:
-      resources:
-        cpu: 32
-    provider:
-      instanceProfile: KarpenterNodeInstanceProfile-${var.eks_cluster_name}
-      subnetSelector:
-        Tier: Private
+    apiVersion: karpenter.sh/v1alpha5
+    kind: Provisioner
+    metadata:
+      name: cheap-instances
+    spec:
+      weight: 100
+      ttlSecondsUntilExpired: 604800
+      ttlSecondsAfterEmpty: 30
+      requirements:
+        - key: "karpenter.k8s.aws/instance-category"
+          operator: In
+          values: ["t"]
+        - key: "karpenter.k8s.aws/instance-size"
+          operator: In
+          values: ["small"]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["spot", "on-demand"]
+      limits:
+        resources:
+          cpu: 32
+      provider:
+        subnetSelector:
+          karpenter.sh/discovery: "true"
+        securityGroupSelector:
+          aws-ids: ${data.aws_eks_cluster.eks-cluster.vpc_config[0].cluster_security_group_id}
+        tags:
+          karpenter.sh/discovery: ${var.eks_cluster_name}
   YAML
 
   depends_on = [
