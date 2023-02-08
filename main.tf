@@ -112,7 +112,7 @@ resource "helm_release" "karpenter" {
   repository_username = data.aws_ecrpublic_authorization_token.token.user_name
   repository_password = data.aws_ecrpublic_authorization_token.token.password
   chart               = "karpenter"
-  version             = "v0.22.1"
+  version             = "v0.24.0"
 
   set {
     name  = "settings.aws.clusterName"
@@ -141,63 +141,28 @@ resource "helm_release" "karpenter" {
 }
 
 # Workaround - https://github.com/hashicorp/terraform-provider-kubernetes/issues/1380#issuecomment-967022975
-# Use all instance types as fallback and default
-#resource "kubectl_manifest" "karpenter_provisioner" {
-#  yaml_body = <<-YAML
-#    apiVersion: karpenter.sh/v1alpha5
-#    kind: Provisioner
-#    metadata:
-#      name: default
-#    spec:
-#      weight: 0
-#      ttlSecondsUntilExpired: 604800
-#      ttlSecondsAfterEmpty: 30
-#      requirements:
-#        - key: karpenter.sh/capacity-type
-#          operator: In
-#          values: ["spot", "on-demand"]
-#        - key: "kubernetes.io/arch"
-#          operator: In
-#          values: ["arm64", "amd64"]
-#      limits:
-#        resources:
-#          cpu: 32
-#      provider:
-#        subnetSelector:
-#          karpenter.sh/discovery: "true"
-#        securityGroupSelector:
-#          aws-ids: ${data.aws_eks_cluster.eks-cluster.vpc_config[0].cluster_security_group_id}
-#        tags:
-#          karpenter.sh/discovery: ${var.eks_cluster_name}
-#  YAML
-#
-#  depends_on = [
-#    helm_release.karpenter
-#  ]
-#}
-
-# See: https://github.com/aws/karpenter/issues/2916#issuecomment-1351278527
-# provisioner with cheapest instance types
-resource "kubectl_manifest" "karpenter_provisioner_cheap" {
+resource "kubectl_manifest" "karpenter_provisioner" {
   yaml_body = <<-YAML
     apiVersion: karpenter.sh/v1alpha5
     kind: Provisioner
     metadata:
-      name: cheap-instances
+      name: default
     spec:
-      weight: 100
+      consolidation:
+        enabled: true
+      weight: 0
       ttlSecondsUntilExpired: 604800
       ttlSecondsAfterEmpty: 30
       requirements:
-        - key: "karpenter.k8s.aws/instance-category"
+        - key: karpenter.k8s.aws/instance-category
           operator: In
-          values: ["t"]
-        - key: "karpenter.k8s.aws/instance-size"
-          operator: In
-          values: ["small"]
+          values: ["t", "c", "m", "r"]
         - key: karpenter.sh/capacity-type
           operator: In
           values: ["spot", "on-demand"]
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
       limits:
         resources:
           cpu: 32
