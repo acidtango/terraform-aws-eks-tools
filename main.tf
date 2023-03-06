@@ -141,6 +141,7 @@ resource "helm_release" "karpenter" {
 }
 
 # Workaround - https://github.com/hashicorp/terraform-provider-kubernetes/issues/1380#issuecomment-967022975
+# Use all instance types as fallback
 resource "kubectl_manifest" "karpenter_provisioner" {
   yaml_body = <<-YAML
     apiVersion: karpenter.sh/v1alpha5
@@ -156,6 +157,49 @@ resource "kubectl_manifest" "karpenter_provisioner" {
         - key: karpenter.k8s.aws/instance-category
           operator: In
           values: ["t", "c", "m", "r"]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["spot", "on-demand"]
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+      limits:
+        resources:
+          cpu: 32
+      provider:
+        subnetSelector:
+          karpenter.sh/discovery: "true"
+        securityGroupSelector:
+          aws-ids: ${data.aws_eks_cluster.eks-cluster.vpc_config[0].cluster_security_group_id}
+        tags:
+          karpenter.sh/discovery: ${var.eks_cluster_name}
+  YAML
+
+  depends_on = [
+    helm_release.karpenter
+  ]
+}
+
+# Workaround - https://github.com/hashicorp/terraform-provider-kubernetes/issues/1380#issuecomment-967022975
+# provisioner with cheapest instance types
+resource "kubectl_manifest" "karpenter_provisioner_cheap" {
+  yaml_body = <<-YAML
+    apiVersion: karpenter.sh/v1alpha5
+    kind: Provisioner
+    metadata:
+      name: cheap-instances
+    spec:
+      consolidation:
+        enabled: true
+      weight: 100
+      ttlSecondsUntilExpired: 604800
+      requirements:
+        - key: karpenter.k8s.aws/instance-category
+          operator: In
+          values: ["t", "c", "m", "r"]
+        - key: karpenter.k8s.aws/instance-size
+          operator: In
+          values: ["small", "medium"]
         - key: karpenter.sh/capacity-type
           operator: In
           values: ["spot", "on-demand"]
