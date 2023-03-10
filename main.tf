@@ -165,7 +165,7 @@ resource "kubectl_manifest" "karpenter_provisioner" {
           values: ["amd64"]
       limits:
         resources:
-          cpu: 32
+          cpu: 64
       provider:
         subnetSelector:
           karpenter.sh/discovery: "true"
@@ -199,7 +199,7 @@ resource "kubectl_manifest" "karpenter_provisioner_cheap" {
           values: ["t", "c", "m", "r"]
         - key: karpenter.k8s.aws/instance-size
           operator: In
-          values: ["small", "medium"]
+          values: ["nano", "micro", "small", "medium"]
         - key: karpenter.sh/capacity-type
           operator: In
           values: ["spot", "on-demand"]
@@ -208,7 +208,7 @@ resource "kubectl_manifest" "karpenter_provisioner_cheap" {
           values: ["amd64"]
       limits:
         resources:
-          cpu: 32
+          cpu: 64
       provider:
         subnetSelector:
           karpenter.sh/discovery: "true"
