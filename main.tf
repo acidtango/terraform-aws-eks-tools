@@ -103,14 +103,23 @@ data "aws_ecrpublic_authorization_token" "token" {
   provider = aws.virginia
 }
 
+provider "helm" {
+  registry {
+    url      = "oci://public.ecr.aws"
+    username = data.aws_ecrpublic_authorization_token.token.user_name
+    password = data.aws_ecrpublic_authorization_token.token.password
+  }
+  alias = "karpenter-helm-provider"
+}
+
 resource "helm_release" "karpenter" {
+  provider = "helm.karpenter-helm-provider"
+
   namespace        = "karpenter"
   create_namespace = true
 
   name                = "karpenter"
   repository          = "oci://public.ecr.aws/karpenter"
-  repository_username = data.aws_ecrpublic_authorization_token.token.user_name
-  repository_password = data.aws_ecrpublic_authorization_token.token.password
   chart               = "karpenter"
   version             = "v0.24.0"
 
