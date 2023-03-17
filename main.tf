@@ -17,7 +17,7 @@ locals {
 
 module "alb_controller" {
   source  = "Young-ook/eks/aws//modules/lb-controller"
-  version = "1.7.10"
+  version = "1.7.11"
 
   oidc = local.oidc
   helm = {
@@ -47,7 +47,7 @@ module "external_dns" {
 
 module "container-insights" {
   source  = "Young-ook/eks/aws//modules/container-insights"
-  version = "1.7.10"
+  version = "1.7.11"
 
   cluster_name = data.aws_eks_cluster.eks-cluster.name
   oidc         = local.oidc
@@ -62,7 +62,7 @@ module "container-insights" {
 
 module "metrics-server" {
   source  = "Young-ook/eks/aws//modules/metrics-server"
-  version = "1.7.10"
+  version = "1.7.11"
 
   oidc = local.oidc
   helm = {
