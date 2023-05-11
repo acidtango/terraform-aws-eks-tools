@@ -157,6 +157,10 @@ resource "kubectl_manifest" "karpenter_provisioner" {
         - key: karpenter.k8s.aws/instance-category
           operator: In
           values: ["t", "c", "m", "r"]
+# Blocklist for instance types that give us problems in the past
+        - key: node.kubernetes.io/instance-type
+          operator: NotIn
+          values: ["m1.small"]
         - key: karpenter.sh/capacity-type
           operator: In
           values: ["spot", "on-demand"]
@@ -200,6 +204,10 @@ resource "kubectl_manifest" "karpenter_provisioner_cheap" {
         - key: karpenter.k8s.aws/instance-size
           operator: In
           values: ["nano", "micro", "small", "medium"]
+# Blocklist for instance types that give us problems in the past
+        - key: node.kubernetes.io/instance-type
+          operator: NotIn
+          values: ["m1.small"]
         - key: karpenter.sh/capacity-type
           operator: In
           values: ["spot", "on-demand"]
