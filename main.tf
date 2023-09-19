@@ -16,15 +16,10 @@ locals {
 // AWS Load Balancer Controller Installation
 
 module "alb_controller" {
-  source  = "Young-ook/eks/aws//modules/lb-controller"
-  version = "1.7.10"
+  source  = "campaand/alb-controller/aws"
+  version = "2.0.0"
 
-  oidc = local.oidc
-  helm = {
-    vars = {
-      clusterName = var.eks_cluster_name
-    }
-  }
+  cluster_name = var.eks_cluster_name
 }
 
 
