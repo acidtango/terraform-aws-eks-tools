@@ -1,32 +1,41 @@
-variable "eks_cluster_name" {
-  description = "eks cluster name where you want to install this tools"
+variable "iam_oidc_provider" {
+  description = "The IAM OIDC provider associated with the EKS cluster"
+  type = object({
+    arn = string
+    url = string
+  })
+}
+
+variable "eks" {
+  description = "The EKS cluster where you want to install the tools"
+  type = object({
+    cluster_name                    = string
+    cluster_version                 = string
+    cluster_iam_authenticator_token = string # The token used by the Kubernetes provider to authenticate with the EKS cluster
+    cluster_endpoint                = string
+    cluster_ca_certificate          = string # The CA certificate for the EKS cluster, obtained by decoding the base64-encoded certificate authority data from the EKS cluster resource.
+    cluster_worker_node_role_arn    = string # The IAM role ARN of the EKS node group, required by Karpenter to provision new nodes
+    cluster_vpc_id                  = string
+    cluster_security_group_id       = string
+  })
+}
+
+variable "name_prefix" {
+  description = "A prefix that will be prepended to the names of AWS resources created by this module"
   type        = string
 }
 
-variable "iam_oidc_provider_arn" {
-  description = "identity issuer of eks cluster you want to install external dns"
-}
-
-variable "iam_oidc_provider_url" {
-  description = "identity issuer of eks cluster you want to install some tools url"
-}
-
 variable "domain" {
-  description = "domain for external dns to listen for changes"
+  description = "The domain name for External DNS to listen for changes"
+  type        = string
 }
 
-variable "enable-metrics" {
-  description = "A conditional indicator to enable container insights metrics"
-  type        = bool
-  default     = true
+variable "tags" {
+  description = "A map of tags to add to all resources"
+  type        = map(string)
 }
 
-variable "enable-logs" {
-  description = "A conditional indicator to enable container insights logs"
-  type        = bool
-  default     = true
-}
-
-variable "eks-node-group-iam-role-arn" {
-  description = "karpenter needs the node group iam role arn to create new nodes"
+variable "region" {
+  description = "The AWS region where the EKS cluster will be deployed"
+  type        = string
 }
