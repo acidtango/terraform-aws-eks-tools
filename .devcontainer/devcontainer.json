@@ -1,0 +1,13 @@
+{
+  "name": "Terraform",
+  "image": "mcr.microsoft.com/devcontainers/base:debian",
+  "features": {
+    "ghcr.io/devcontainers/features/terraform:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": ["hashicorp.terraform", "ms-azuretools.vscode-docker"]
+    }
+  },
+  "postCreateCommand": "terraform --version"
+}
