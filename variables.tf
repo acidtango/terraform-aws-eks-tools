@@ -30,3 +30,9 @@ variable "enable-logs" {
 variable "eks-node-group-iam-role-arn" {
   description = "karpenter needs the node group iam role arn to create new nodes"
 }
+
+variable "tags" {
+  description = "A map of tags to add to all resources"
+  type        = map(string)
+  default = {}
+}
