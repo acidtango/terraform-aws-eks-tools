@@ -68,7 +68,7 @@ resource "helm_release" "alb_ingress_controller" {
   namespace  = "kube-system"
   repository = "https://aws.github.io/eks-charts"
   chart      = "aws-load-balancer-controller"
-  version    = "1.12.0"
+  version    = "1.13.3"
 
   values = [
     <<-EOT
