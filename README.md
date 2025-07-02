@@ -18,7 +18,7 @@ This module installs and configures the following resources:
 
 | Helm Chart                       | Version  | Description                                      |
 | -------------------------------- | -------- | ------------------------------------------------ |
-| **AWS Load Balancer Controller** | `1.11`   | AWS load balancer controller for Kubernetes.     |
+| **AWS Load Balancer Controller** | `1.13.3` | AWS load balancer controller for Kubernetes.     |
 | **External DNS**                 | `1.15.2` | Automatically manages DNS records in Route 53.   |
 | **Metrics Server**               | `3.12.2` | Provides support for pod auto-scaling (HPA).     |
 | **AWS Container Insights**       | `0.1.34` | Logs and metrics in CloudWatch Logs.             |
@@ -55,7 +55,6 @@ This module installs and configures the following resources:
 | `enable-logs`                 | bool        | A conditional indicator to enable container insights logs.         |
 | `tags`                        | map(string) | A map of tags to add to all resources.                             |
 
-
 ## Usage
 
 Example usage of the module:
@@ -73,7 +72,6 @@ module "eks-tools" {
   tags                        = { "Environment" = "staging", "CreatedBy"   = "Acidtango" }
 }
 ```
-
 
 ## References
 
