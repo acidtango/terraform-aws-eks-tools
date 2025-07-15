@@ -155,7 +155,7 @@ resource "helm_release" "external_dns" {
   namespace  = "kube-system"
   repository = "https://kubernetes-sigs.github.io/external-dns/"
   chart      = "external-dns"
-  version    = "1.15.2"
+  version    = "1.18.0"
 
   values = [
     <<-EOT
