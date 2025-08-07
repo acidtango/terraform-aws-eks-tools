@@ -185,7 +185,7 @@ resource "helm_release" "container_insights_logs" {
   namespace  = "kube-system"
   repository = "https://aws.github.io/eks-charts"
   chart      = "aws-for-fluent-bit"
-  version    = "0.1.34"
+  version    = "0.1.35"
 }
 
 // This helm is not working
