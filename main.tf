@@ -56,7 +56,7 @@ resource "helm_release" "alb_ingress_controller" {
   namespace  = "kube-system"
   repository = "https://aws.github.io/eks-charts"
   chart      = "aws-load-balancer-controller"
-  version    = "1.13.3"
+  version    = "1.13.4"
 
   values = [
     <<-EOT
@@ -145,7 +145,7 @@ resource "helm_release" "external_dns" {
   namespace  = "kube-system"
   repository = "https://kubernetes-sigs.github.io/external-dns/"
   chart      = "external-dns"
-  version    = "1.15.2"
+  version    = "1.18.0"
 
   values = [
     <<-EOT
@@ -178,7 +178,7 @@ resource "helm_release" "container_insights_logs" {
   namespace  = "kube-system"
   repository = "https://aws.github.io/eks-charts"
   chart      = "aws-for-fluent-bit"
-  version    = "0.1.34"
+  version    = "0.1.35"
 }
 
 // This helm is not working
@@ -204,7 +204,7 @@ resource "helm_release" "metrics_server" {
   namespace  = "kube-system"
   repository = "https://kubernetes-sigs.github.io/metrics-server/"
   chart      = "metrics-server"
-  version    = "3.12.2"
+  version    = "3.13.0"
 }
 
 
@@ -214,7 +214,7 @@ resource "helm_release" "metrics_server" {
 
 module "karpenter" {
   source  = "terraform-aws-modules/eks/aws//modules/karpenter"
-  version = "20.33.1"
+  version = "20.37.2"
 
   cluster_name = var.eks_cluster_name
 
@@ -252,7 +252,7 @@ resource "helm_release" "karpenter" {
   name       = "karpenter"
   repository = "oci://public.ecr.aws/karpenter"
   chart      = "karpenter"
-  version    = "1.3.0"
+  version    = "1.4.0"
 
 
   values = [
