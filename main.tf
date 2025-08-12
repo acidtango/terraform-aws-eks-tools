@@ -59,16 +59,18 @@ resource "helm_release" "alb_ingress_controller" {
   version    = "1.13.4"
 
   values = [
-    <<-EOT
-    clusterName: ${var.eks_cluster_name}
-    serviceAccount:
-      create: false
-      name: ${kubernetes_service_account.aws_lb_controller_sa.metadata[0].name}
-      annotations:
-        eks.amazonaws.com/role-arn: ${aws_iam_role.aws_lb_controller_role.arn}
-    vpcId: ${data.aws_eks_cluster.eks_cluster.vpc_config[0].vpc_id}
-    region: ${data.aws_region.current.name}
-    EOT
+    yamlencode({
+      clusterName = var.eks_cluster_name
+      vpcId       = data.aws_eks_cluster.eks_cluster.vpc_config[0].vpc_id
+      region      = data.aws_region.current.name
+      serviceAccount = {
+        create = false
+        name   = kubernetes_service_account.aws_lb_controller_sa.metadata[0].name
+        annotations = {
+          "eks.amazonaws.com/role-arn" = aws_iam_role.aws_lb_controller_role.arn
+        }
+      }
+    })
   ]
 }
 
@@ -148,21 +150,23 @@ resource "helm_release" "external_dns" {
   version    = "1.18.0"
 
   values = [
-    <<-EOT
-    txtOwnerId: "${var.eks_cluster_name}"
-    domainFilters:
-      - "${var.domain}"
-    policy: sync
-    logLevel: debug
-    sources:
-      - ingress
-      - service
-    serviceAccount:
-      create: false
-      name: ${kubernetes_service_account.aws_external_dns_sa.metadata[0].name}
-      annotations:
-        eks.amazonaws.com/role-arn: ${aws_iam_role.aws_external_dns_role.arn}
-    EOT
+    yamlencode({
+      txtOwnerId    = var.eks_cluster_name
+      domainFilters = [var.domain]
+      policy        = "sync"
+      logLevel      = "debug"
+      sources = [
+        "ingress",
+        "service"
+      ]
+      serviceAccount = {
+        create = false
+        name   = kubernetes_service_account.aws_external_dns_sa.metadata[0].name
+        annotations = {
+          "eks.amazonaws.com/role-arn" = aws_iam_role.aws_external_dns_role.arn
+        }
+      }
+    })
   ]
 }
 
@@ -394,18 +398,20 @@ resource "helm_release" "karpenter" {
   chart      = "karpenter"
   version    = "1.4.0"
 
-
   values = [
-    <<-EOT
-    settings:
-      clusterName: ${var.eks_cluster_name}
-      clusterEndpoint: ${data.aws_eks_cluster.eks_cluster.endpoint}
-      defaultInstanceProfile: ${module.karpenter.instance_profile_name}
-      interruptionQueueName: ${module.karpenter.queue_name}
-    serviceAccount:
-      annotations:
-        eks.amazonaws.com/role-arn: ${module.karpenter.iam_role_arn}
-    EOT
+    yamlencode({
+      settings = {
+        clusterName            = var.eks_cluster_name
+        clusterEndpoint        = data.aws_eks_cluster.eks_cluster.endpoint
+        defaultInstanceProfile = module.karpenter.instance_profile_name
+        interruptionQueueName  = module.karpenter.queue_name
+      }
+      serviceAccount = {
+        annotations = {
+          "eks.amazonaws.com/role-arn" = module.karpenter.iam_role_arn
+        }
+      }
+    })
   ]
 }
 
