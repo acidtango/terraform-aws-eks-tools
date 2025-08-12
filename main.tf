@@ -171,14 +171,99 @@ resource "helm_release" "external_dns" {
 ### AWS for fluent bit
 ##############################################
 
-# TODO: Improve this helm release to use custom service account and log group
-resource "helm_release" "container_insights_logs" {
+
+resource "aws_iam_role" "aws_for_fluent_bit_role" {
+  count = var.enable_logs ? 1 : 0
+  name  = "${var.eks_cluster_name}-aws-for-fluent-bit-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Federated = var.iam_oidc_provider_arn
+      }
+      Action = "sts:AssumeRoleWithWebIdentity"
+      Condition = {
+        StringEquals = {
+          "${replace(var.iam_oidc_provider_url, "https://", "")}:sub" = "system:serviceaccount:kube-system:aws-for-fluent-bit"
+        }
+      }
+    }]
+  })
+
+  tags = var.tags
+}
+
+resource "aws_iam_policy" "aws_for_fluent_bit_policy" {
+  count = var.enable_logs ? 1 : 0
+  name  = "${var.eks_cluster_name}-FluentBitLogs"
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:DescribeLogGroups",
+          "logs:DescribeLogStreams",
+          "logs:PutLogEvents"
+        ],
+        Resource = "arn:aws:logs:*:*:*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "aws_for_fluent_bit_policy_attach" {
   count      = var.enable_logs ? 1 : 0
-  name       = "container-insights-logs"
+  role       = aws_iam_role.aws_for_fluent_bit_role[0].name
+  policy_arn = aws_iam_policy.aws_for_fluent_bit_policy[0].arn
+}
+
+resource "kubernetes_service_account" "aws_for_fluent_bit_sa" {
+  count = var.enable_logs ? 1 : 0
+
+  metadata {
+    name      = "aws-for-fluent-bit"
+    namespace = "kube-system"
+    annotations = {
+      "eks.amazonaws.com/role-arn" = aws_iam_role.aws_for_fluent_bit_role[0].arn
+    }
+  }
+}
+
+resource "aws_cloudwatch_log_group" "aws_for_fluent_bit_log_group" {
+  count             = var.enable_logs ? 1 : 0
+  name              = "/aws/eks/${var.eks_cluster_name}/logs"
+  retention_in_days = 90
+  tags              = var.tags
+}
+
+resource "helm_release" "aws_for_fluent_bit" {
+  count      = var.enable_logs ? 1 : 0
+  name       = "aws-for-fluent-bit"
   namespace  = "kube-system"
   repository = "https://aws.github.io/eks-charts"
   chart      = "aws-for-fluent-bit"
   version    = "0.1.35"
+
+  values = [
+    yamlencode({
+      cloudWatchLogs = {
+        logGroupName = aws_cloudwatch_log_group.aws_for_fluent_bit_log_group[0].name
+        region       = data.aws_region.current.name
+      }
+      serviceAccount = {
+        create = false
+        name   = kubernetes_service_account.aws_for_fluent_bit_sa[0].metadata[0].name
+        annotations = {
+          "eks.amazonaws.com/role-arn" = aws_iam_role.aws_for_fluent_bit_role[0].arn
+        }
+      }
+    })
+  ]
 }
 
 
