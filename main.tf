@@ -272,7 +272,8 @@ resource "helm_release" "aws_for_fluent_bit" {
 ##############################################
 
 resource "aws_iam_role" "aws_cw_agent_role" {
-  name = "${var.eks_cluster_name}-aws-cw-agent-role"
+  count = var.enable_metrics ? 1 : 0
+  name  = "${var.eks_cluster_name}-aws-cw-agent-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
@@ -294,37 +295,42 @@ resource "aws_iam_role" "aws_cw_agent_role" {
 }
 
 resource "aws_iam_role_policy_attachment" "aws_cw_agent_policy_attach" {
-  role       = aws_iam_role.aws_cw_agent_role.name
+  count      = var.enable_metrics ? 1 : 0
+  role       = aws_iam_role.aws_cw_agent_role[0].name
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
 }
 
 resource "kubernetes_service_account" "aws_cw_agent_sa" {
+  count = var.enable_metrics ? 1 : 0
+
   metadata {
     name      = "aws-cloudwatch-agent"
     namespace = "kube-system"
     annotations = {
-      "eks.amazonaws.com/role-arn" = aws_iam_role.aws_cw_agent_role.arn
+      "eks.amazonaws.com/role-arn" = aws_iam_role.aws_cw_agent_role[0].arn
     }
   }
 }
 
-resource "helm_release" "container_insights_metrics" {
+resource "helm_release" "aws_cloudwatch_metrics" {
   count      = var.enable_metrics ? 1 : 0
-  name       = "container-insights-metrics"
+  name       = "aws-cloudwatch-metrics"
   namespace  = "kube-system"
   repository = "https://aws.github.io/eks-charts"
   chart      = "aws-cloudwatch-metrics"
   version    = "0.0.11"
 
   values = [
-    <<-EOT
-    clusterName: ${var.eks_cluster_name}
-    serviceAccount:
-      create: false
-      name: ${kubernetes_service_account.aws_cw_agent_sa.metadata[0].name}
-      annotations:
-        eks.amazonaws.com/role-arn: ${aws_iam_role.aws_cw_agent_role.arn}
-   EOT
+    yamlencode({
+      clusterName = var.eks_cluster_name
+      serviceAccount = {
+        create = false
+        name   = kubernetes_service_account.aws_cw_agent_sa[0].metadata[0].name
+        annotations = {
+          "eks.amazonaws.com/role-arn" = aws_iam_role.aws_cw_agent_role[0].arn
+        }
+      }
+    })
   ]
 }
 
