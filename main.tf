@@ -1,20 +1,13 @@
-// EKS Tools configuration
-
 data "aws_region" "current" {}
 
-data "aws_eks_cluster" "eks-cluster" {
+data "aws_eks_cluster" "eks_cluster" {
   name = var.eks_cluster_name
 }
 
-locals {
-  oidc = {
-    url = replace(var.iam_oidc_provider_url, "https://", "")
-    arn = var.iam_oidc_provider_arn
-  }
-}
 
-
-// AWS Load Balancer Controller Installation
+##############################################
+### AWS Load Balancer Controller
+##############################################
 
 resource "aws_iam_role" "aws_lb_controller_role" {
   name = "${var.eks_cluster_name}-aws-lb-controller-role"
@@ -43,14 +36,10 @@ resource "aws_iam_policy" "aws_lb_controller_policy" {
   policy = file("${path.module}/iam_policy.json")
 }
 
-
 resource "aws_iam_role_policy_attachment" "aws_lb_controller_policy_attach" {
   role       = aws_iam_role.aws_lb_controller_role.name
   policy_arn = aws_iam_policy.aws_lb_controller_policy.arn
 }
-
-
-
 
 resource "kubernetes_service_account" "aws_lb_controller_sa" {
   metadata {
@@ -61,7 +50,6 @@ resource "kubernetes_service_account" "aws_lb_controller_sa" {
     }
   }
 }
-
 
 resource "helm_release" "alb_ingress_controller" {
   name       = "aws-load-balancer-controller"
@@ -78,14 +66,16 @@ resource "helm_release" "alb_ingress_controller" {
       name: ${kubernetes_service_account.aws_lb_controller_sa.metadata[0].name}
       annotations:
         eks.amazonaws.com/role-arn: ${aws_iam_role.aws_lb_controller_role.arn}
-    vpcId: ${data.aws_eks_cluster.eks-cluster.vpc_config[0].vpc_id}
+    vpcId: ${data.aws_eks_cluster.eks_cluster.vpc_config[0].vpc_id}
     region: ${data.aws_region.current.name}
     EOT
   ]
 }
 
 
-// AWS External DNS Ingress Controller Installation
+##############################################
+### Kubernetes ExternalDNS
+##############################################
 
 resource "aws_iam_role" "aws_external_dns_role" {
   name = "${var.eks_cluster_name}-aws-external-dns-role"
@@ -177,10 +167,13 @@ resource "helm_release" "external_dns" {
 }
 
 
-// AWS Container Inshights Installation
+##############################################
+### AWS for fluent bit
+##############################################
 
+# TODO: Improve this helm release to use custom service account and log group
 resource "helm_release" "container_insights_logs" {
-  count      = var.enable-logs ? 1 : 0
+  count      = var.enable_logs ? 1 : 0
   name       = "container-insights-logs"
   namespace  = "kube-system"
   repository = "https://aws.github.io/eks-charts"
@@ -215,8 +208,9 @@ resource "helm_release" "metrics_server" {
 }
 
 
-// Karpenter Installation
-// Inspired from: https://karpenter.sh/v0.22.1/getting-started/getting-started-with-terraform/
+##############################################
+### Karpenter
+##############################################
 
 module "karpenter" {
   source  = "terraform-aws-modules/eks/aws//modules/karpenter"
@@ -232,7 +226,7 @@ module "karpenter" {
   irsa_namespace_service_accounts = ["karpenter:karpenter"]
 
   create_node_iam_role          = false
-  node_iam_role_arn             = var.eks-node-group-iam-role-arn
+  node_iam_role_arn             = var.eks_node_group_iam_role_arn
   node_iam_role_use_name_prefix = false
 
   # Error: creating EKS Access Entry ResourceInUseException: The specified access entry resource is already in use on this cluster.
@@ -265,7 +259,7 @@ resource "helm_release" "karpenter" {
     <<-EOT
     settings:
       clusterName: ${var.eks_cluster_name}
-      clusterEndpoint: ${data.aws_eks_cluster.eks-cluster.endpoint}
+      clusterEndpoint: ${data.aws_eks_cluster.eks_cluster.endpoint}
       defaultInstanceProfile: ${module.karpenter.instance_profile_name}
       interruptionQueueName: ${module.karpenter.queue_name}
     serviceAccount:
@@ -288,8 +282,8 @@ resource "kubectl_manifest" "karpenter_nodeclass_default" {
         - tags:
             karpenter.sh/discovery: "true"
       securityGroupSelectorTerms:
-        - id: ${data.aws_eks_cluster.eks-cluster.vpc_config[0].cluster_security_group_id}
-      role: "${var.eks-node-group-iam-role-arn}"
+        - id: ${data.aws_eks_cluster.eks_cluster.vpc_config[0].cluster_security_group_id}
+      role: "${var.eks_node_group_iam_role_arn}"
       tags:
         "Name": "karpenter-node"
         "karpenter.sh/discovery": "true"
