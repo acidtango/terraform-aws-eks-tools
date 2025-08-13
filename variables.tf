@@ -18,7 +18,7 @@ variable "domain" {
 variable "enable_metrics" {
   description = "A conditional indicator to enable container insights metrics"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "enable_logs" {
