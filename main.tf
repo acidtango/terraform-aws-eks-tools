@@ -1,20 +1,13 @@
-// EKS Tools configuration
-
 data "aws_region" "current" {}
 
-data "aws_eks_cluster" "eks-cluster" {
+data "aws_eks_cluster" "eks_cluster" {
   name = var.eks_cluster_name
 }
 
-locals {
-  oidc = {
-    url = replace(var.iam_oidc_provider_url, "https://", "")
-    arn = var.iam_oidc_provider_arn
-  }
-}
 
-
-// AWS Load Balancer Controller Installation
+##############################################
+### AWS Load Balancer Controller
+##############################################
 
 resource "aws_iam_role" "aws_lb_controller_role" {
   name = "${var.eks_cluster_name}-aws-lb-controller-role"
@@ -43,14 +36,10 @@ resource "aws_iam_policy" "aws_lb_controller_policy" {
   policy = file("${path.module}/iam_policy.json")
 }
 
-
 resource "aws_iam_role_policy_attachment" "aws_lb_controller_policy_attach" {
   role       = aws_iam_role.aws_lb_controller_role.name
   policy_arn = aws_iam_policy.aws_lb_controller_policy.arn
 }
-
-
-
 
 resource "kubernetes_service_account" "aws_lb_controller_sa" {
   metadata {
@@ -62,30 +51,33 @@ resource "kubernetes_service_account" "aws_lb_controller_sa" {
   }
 }
 
-
 resource "helm_release" "alb_ingress_controller" {
   name       = "aws-load-balancer-controller"
   namespace  = "kube-system"
   repository = "https://aws.github.io/eks-charts"
   chart      = "aws-load-balancer-controller"
-  version    = "1.13.3"
+  version    = "1.13.4"
 
   values = [
-    <<-EOT
-    clusterName: ${var.eks_cluster_name}
-    serviceAccount:
-      create: false
-      name: ${kubernetes_service_account.aws_lb_controller_sa.metadata[0].name}
-      annotations:
-        eks.amazonaws.com/role-arn: ${aws_iam_role.aws_lb_controller_role.arn}
-    vpcId: ${data.aws_eks_cluster.eks-cluster.vpc_config[0].vpc_id}
-    region: ${data.aws_region.current.name}
-    EOT
+    yamlencode({
+      clusterName = var.eks_cluster_name
+      vpcId       = data.aws_eks_cluster.eks_cluster.vpc_config[0].vpc_id
+      region      = data.aws_region.current.name
+      serviceAccount = {
+        create = false
+        name   = kubernetes_service_account.aws_lb_controller_sa.metadata[0].name
+        annotations = {
+          "eks.amazonaws.com/role-arn" = aws_iam_role.aws_lb_controller_role.arn
+        }
+      }
+    })
   ]
 }
 
 
-// AWS External DNS Ingress Controller Installation
+##############################################
+### Kubernetes ExternalDNS
+##############################################
 
 resource "aws_iam_role" "aws_external_dns_role" {
   name = "${var.eks_cluster_name}-aws-external-dns-role"
@@ -155,72 +147,218 @@ resource "helm_release" "external_dns" {
   namespace  = "kube-system"
   repository = "https://kubernetes-sigs.github.io/external-dns/"
   chart      = "external-dns"
-  version    = "1.15.2"
+  version    = "1.18.0"
 
   values = [
-    <<-EOT
-    txtOwnerId: "${var.eks_cluster_name}"
-    domainFilters:
-      - "${var.domain}"
-    policy: sync
-    logLevel: debug
-    sources:
-      - ingress
-      - service
-    serviceAccount:
-      create: false
-      name: ${kubernetes_service_account.aws_external_dns_sa.metadata[0].name}
-      annotations:
-        eks.amazonaws.com/role-arn: ${aws_iam_role.aws_external_dns_role.arn}
-    EOT
+    yamlencode({
+      txtOwnerId    = var.eks_cluster_name
+      domainFilters = [var.domain]
+      policy        = "sync"
+      logLevel      = "debug"
+      sources = [
+        "ingress",
+        "service"
+      ]
+      serviceAccount = {
+        create = false
+        name   = kubernetes_service_account.aws_external_dns_sa.metadata[0].name
+        annotations = {
+          "eks.amazonaws.com/role-arn" = aws_iam_role.aws_external_dns_role.arn
+        }
+      }
+    })
   ]
 }
 
 
-// AWS Container Inshights Installation
+##############################################
+### AWS for fluent bit
+##############################################
 
-resource "helm_release" "container_insights_logs" {
-  count      = var.enable-logs ? 1 : 0
-  name       = "container-insights-logs"
+
+resource "aws_iam_role" "aws_for_fluent_bit_role" {
+  count = var.enable_logs ? 1 : 0
+  name  = "${var.eks_cluster_name}-aws-for-fluent-bit-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Federated = var.iam_oidc_provider_arn
+      }
+      Action = "sts:AssumeRoleWithWebIdentity"
+      Condition = {
+        StringEquals = {
+          "${replace(var.iam_oidc_provider_url, "https://", "")}:sub" = "system:serviceaccount:kube-system:aws-for-fluent-bit"
+        }
+      }
+    }]
+  })
+
+  tags = var.tags
+}
+
+resource "aws_iam_policy" "aws_for_fluent_bit_policy" {
+  count = var.enable_logs ? 1 : 0
+  name  = "${var.eks_cluster_name}-FluentBitLogs"
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:DescribeLogGroups",
+          "logs:DescribeLogStreams",
+          "logs:PutLogEvents"
+        ],
+        Resource = "arn:aws:logs:*:*:*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "aws_for_fluent_bit_policy_attach" {
+  count      = var.enable_logs ? 1 : 0
+  role       = aws_iam_role.aws_for_fluent_bit_role[0].name
+  policy_arn = aws_iam_policy.aws_for_fluent_bit_policy[0].arn
+}
+
+resource "kubernetes_service_account" "aws_for_fluent_bit_sa" {
+  count = var.enable_logs ? 1 : 0
+
+  metadata {
+    name      = "aws-for-fluent-bit"
+    namespace = "kube-system"
+    annotations = {
+      "eks.amazonaws.com/role-arn" = aws_iam_role.aws_for_fluent_bit_role[0].arn
+    }
+  }
+}
+
+resource "aws_cloudwatch_log_group" "aws_for_fluent_bit_log_group" {
+  count             = var.enable_logs ? 1 : 0
+  name              = "/aws/eks/${var.eks_cluster_name}/logs"
+  retention_in_days = 90
+  tags              = var.tags
+}
+
+resource "helm_release" "aws_for_fluent_bit" {
+  count      = var.enable_logs ? 1 : 0
+  name       = "aws-for-fluent-bit"
   namespace  = "kube-system"
   repository = "https://aws.github.io/eks-charts"
   chart      = "aws-for-fluent-bit"
-  version    = "0.1.34"
+  version    = "0.1.35"
+
+  values = [
+    yamlencode({
+      cloudWatchLogs = {
+        logGroupName = aws_cloudwatch_log_group.aws_for_fluent_bit_log_group[0].name
+        region       = data.aws_region.current.name
+      }
+      serviceAccount = {
+        create = false
+        name   = kubernetes_service_account.aws_for_fluent_bit_sa[0].metadata[0].name
+        annotations = {
+          "eks.amazonaws.com/role-arn" = aws_iam_role.aws_for_fluent_bit_role[0].arn
+        }
+      }
+    })
+  ]
 }
 
-// This helm is not working
-#resource "helm_release" "container_insights_metrics" {
-#  count      = var.enable-metrics ? 1 : 0
-#  name       = "container-insights-metrics"
-#  namespace  = "kube-system"
-#  repository = "https://aws.github.io/eks-charts"
-#  chart      = "aws-cloudwatch-metrics"
-#  version    = "0.0.11"
-#  #values = [
-#  #  <<-EOT
-#  #  clusterName: "${var.eks_cluster_name}"
-#  #  EOT
-#  #]
-#}
+
+##############################################
+### AWS Cloudwatch metrics
+##############################################
+
+resource "aws_iam_role" "aws_cw_agent_role" {
+  count = var.enable_metrics ? 1 : 0
+  name  = "${var.eks_cluster_name}-aws-cw-agent-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Effect = "Allow",
+      Principal = {
+        Federated = var.iam_oidc_provider_arn
+      },
+      Action = "sts:AssumeRoleWithWebIdentity",
+      Condition = {
+        StringEquals = {
+          "${replace(var.iam_oidc_provider_url, "https://", "")}:sub" = "system:serviceaccount:kube-system:aws-cloudwatch-agent"
+        }
+      }
+    }]
+  })
+
+  tags = var.tags
+}
+
+resource "aws_iam_role_policy_attachment" "aws_cw_agent_policy_attach" {
+  count      = var.enable_metrics ? 1 : 0
+  role       = aws_iam_role.aws_cw_agent_role[0].name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+}
+
+resource "kubernetes_service_account" "aws_cw_agent_sa" {
+  count = var.enable_metrics ? 1 : 0
+
+  metadata {
+    name      = "aws-cloudwatch-agent"
+    namespace = "kube-system"
+    annotations = {
+      "eks.amazonaws.com/role-arn" = aws_iam_role.aws_cw_agent_role[0].arn
+    }
+  }
+}
+
+resource "helm_release" "aws_cloudwatch_metrics" {
+  count      = var.enable_metrics ? 1 : 0
+  name       = "aws-cloudwatch-metrics"
+  namespace  = "kube-system"
+  repository = "https://aws.github.io/eks-charts"
+  chart      = "aws-cloudwatch-metrics"
+  version    = "0.0.11"
+
+  values = [
+    yamlencode({
+      clusterName = var.eks_cluster_name
+      serviceAccount = {
+        create = false
+        name   = kubernetes_service_account.aws_cw_agent_sa[0].metadata[0].name
+        annotations = {
+          "eks.amazonaws.com/role-arn" = aws_iam_role.aws_cw_agent_role[0].arn
+        }
+      }
+    })
+  ]
+}
 
 
-// Metrics server Installation (for Horizontal Pod Autoscaler)
+##############################################
+### Kubernetes Metrics Server
+##############################################
 
 resource "helm_release" "metrics_server" {
   name       = "metrics-server"
   namespace  = "kube-system"
   repository = "https://kubernetes-sigs.github.io/metrics-server/"
   chart      = "metrics-server"
-  version    = "3.12.2"
+  version    = "3.13.0"
 }
 
 
-// Karpenter Installation
-// Inspired from: https://karpenter.sh/v0.22.1/getting-started/getting-started-with-terraform/
+##############################################
+### Karpenter
+##############################################
 
 module "karpenter" {
   source  = "terraform-aws-modules/eks/aws//modules/karpenter"
-  version = "20.33.1"
+  version = "20.37.2"
 
   cluster_name = var.eks_cluster_name
 
@@ -232,7 +370,7 @@ module "karpenter" {
   irsa_namespace_service_accounts = ["karpenter:karpenter"]
 
   create_node_iam_role          = false
-  node_iam_role_arn             = var.eks-node-group-iam-role-arn
+  node_iam_role_arn             = var.eks_node_group_iam_role_arn
   node_iam_role_use_name_prefix = false
 
   # Error: creating EKS Access Entry ResourceInUseException: The specified access entry resource is already in use on this cluster.
@@ -258,20 +396,22 @@ resource "helm_release" "karpenter" {
   name       = "karpenter"
   repository = "oci://public.ecr.aws/karpenter"
   chart      = "karpenter"
-  version    = "1.3.0"
-
+  version    = "1.4.0"
 
   values = [
-    <<-EOT
-    settings:
-      clusterName: ${var.eks_cluster_name}
-      clusterEndpoint: ${data.aws_eks_cluster.eks-cluster.endpoint}
-      defaultInstanceProfile: ${module.karpenter.instance_profile_name}
-      interruptionQueueName: ${module.karpenter.queue_name}
-    serviceAccount:
-      annotations:
-        eks.amazonaws.com/role-arn: ${module.karpenter.iam_role_arn}
-    EOT
+    yamlencode({
+      settings = {
+        clusterName            = var.eks_cluster_name
+        clusterEndpoint        = data.aws_eks_cluster.eks_cluster.endpoint
+        defaultInstanceProfile = module.karpenter.instance_profile_name
+        interruptionQueueName  = module.karpenter.queue_name
+      }
+      serviceAccount = {
+        annotations = {
+          "eks.amazonaws.com/role-arn" = module.karpenter.iam_role_arn
+        }
+      }
+    })
   ]
 }
 
@@ -288,8 +428,8 @@ resource "kubectl_manifest" "karpenter_nodeclass_default" {
         - tags:
             karpenter.sh/discovery: "true"
       securityGroupSelectorTerms:
-        - id: ${data.aws_eks_cluster.eks-cluster.vpc_config[0].cluster_security_group_id}
-      role: "${var.eks-node-group-iam-role-arn}"
+        - id: ${data.aws_eks_cluster.eks_cluster.vpc_config[0].cluster_security_group_id}
+      role: "${var.eks_node_group_iam_role_arn}"
       tags:
         "Name": "karpenter-node"
         "karpenter.sh/discovery": "true"
