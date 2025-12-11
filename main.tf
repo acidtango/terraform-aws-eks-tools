@@ -10,7 +10,7 @@ data "aws_eks_cluster" "eks_cluster" {
 ##############################################
 
 resource "aws_iam_role" "aws_lb_controller_role" {
-  name = "${var.eks_cluster_name}-aws-lb-controller-role"
+  name = substr("${data.aws_eks_cluster.eks_cluster.id}-aws-lb-controller-role", 0, 64)
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
@@ -32,7 +32,7 @@ resource "aws_iam_role" "aws_lb_controller_role" {
 }
 
 resource "aws_iam_policy" "aws_lb_controller_policy" {
-  name   = "${var.eks_cluster_name}-AWSLoadBalancerControllerIAMPolicy"
+  name   = "${data.aws_eks_cluster.eks_cluster.id}-AWSLoadBalancerControllerIAMPolicy"
   policy = file("${path.module}/iam_policy.json")
 }
 
@@ -60,7 +60,7 @@ resource "helm_release" "alb_ingress_controller" {
 
   values = [
     yamlencode({
-      clusterName = var.eks_cluster_name
+      clusterName = data.aws_eks_cluster.eks_cluster.id
       vpcId       = data.aws_eks_cluster.eks_cluster.vpc_config[0].vpc_id
       region      = data.aws_region.current.name
       serviceAccount = {
@@ -80,7 +80,7 @@ resource "helm_release" "alb_ingress_controller" {
 ##############################################
 
 resource "aws_iam_role" "aws_external_dns_role" {
-  name = "${var.eks_cluster_name}-aws-external-dns-role"
+  name = substr("${data.aws_eks_cluster.eks_cluster.id}-aws-external-dns-role", 0, 64)
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
@@ -102,7 +102,7 @@ resource "aws_iam_role" "aws_external_dns_role" {
 }
 
 resource "aws_iam_policy" "aws_external_dns_policy" {
-  name = "${var.eks_cluster_name}-AllowExternalDNSUpdates"
+  name = "${data.aws_eks_cluster.eks_cluster.id}-AllowExternalDNSUpdates"
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -151,7 +151,7 @@ resource "helm_release" "external_dns" {
 
   values = [
     yamlencode({
-      txtOwnerId    = var.eks_cluster_name
+      txtOwnerId    = data.aws_eks_cluster.eks_cluster.id
       domainFilters = [var.domain]
       policy        = "sync"
       logLevel      = "debug"
@@ -178,7 +178,7 @@ resource "helm_release" "external_dns" {
 
 resource "aws_iam_role" "aws_for_fluent_bit_role" {
   count = var.enable_logs ? 1 : 0
-  name  = "${var.eks_cluster_name}-aws-for-fluent-bit-role"
+  name  = substr("${data.aws_eks_cluster.eks_cluster.id}-aws-for-fluent-bit-role", 0, 64)
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -201,7 +201,7 @@ resource "aws_iam_role" "aws_for_fluent_bit_role" {
 
 resource "aws_iam_policy" "aws_for_fluent_bit_policy" {
   count = var.enable_logs ? 1 : 0
-  name  = "${var.eks_cluster_name}-FluentBitLogs"
+  name  = "${data.aws_eks_cluster.eks_cluster.id}-FluentBitLogs"
   policy = jsonencode({
     Version = "2012-10-17",
     Statement = [
@@ -240,7 +240,7 @@ resource "kubernetes_service_account" "aws_for_fluent_bit_sa" {
 
 resource "aws_cloudwatch_log_group" "aws_for_fluent_bit_log_group" {
   count             = var.enable_logs ? 1 : 0
-  name              = "/aws/eks/${var.eks_cluster_name}/logs"
+  name              = "/aws/eks/${data.aws_eks_cluster.eks_cluster.id}/logs"
   retention_in_days = 90
   tags              = var.tags
 }
@@ -277,7 +277,7 @@ resource "helm_release" "aws_for_fluent_bit" {
 
 resource "aws_iam_role" "aws_cw_agent_role" {
   count = var.enable_metrics ? 1 : 0
-  name  = "${var.eks_cluster_name}-aws-cw-agent-role"
+  name  = "${data.aws_eks_cluster.eks_cluster.id}-aws-cw-agent-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
@@ -326,7 +326,7 @@ resource "helm_release" "aws_cloudwatch_metrics" {
 
   values = [
     yamlencode({
-      clusterName = var.eks_cluster_name
+      clusterName = data.aws_eks_cluster.eks_cluster.id
       serviceAccount = {
         create = false
         name   = kubernetes_service_account.aws_cw_agent_sa[0].metadata[0].name
@@ -358,16 +358,14 @@ resource "helm_release" "metrics_server" {
 
 module "karpenter" {
   source  = "terraform-aws-modules/eks/aws//modules/karpenter"
-  version = "20.37.2"
+  version = "21.9.0"
 
-  cluster_name = var.eks_cluster_name
+  cluster_name = data.aws_eks_cluster.eks_cluster.id
+  namespace    = "karpenter"
 
   # This variables change to true (by default) in the next breaking changes
-  enable_v1_permissions           = true
+  enable_inline_policy            = true
   create_pod_identity_association = true
-
-  irsa_oidc_provider_arn          = var.iam_oidc_provider_arn
-  irsa_namespace_service_accounts = ["karpenter:karpenter"]
 
   create_node_iam_role          = false
   node_iam_role_arn             = var.eks_node_group_iam_role_arn
@@ -377,16 +375,25 @@ module "karpenter" {
   # https://github.com/terraform-aws-modules/terraform-aws-eks/blob/master/docs/UPGRADE-20.0.md#authentication_mode--api_and_config_map
   create_access_entry = false
 
-  enable_irsa             = true
   create_instance_profile = true
 
   iam_role_use_name_prefix = false
-  iam_role_name            = "KarpenterIRSA-${var.eks_cluster_name}"
+  iam_role_name            = "KarpenterIRSA-${data.aws_eks_cluster.eks_cluster.id}"
   iam_role_description     = "Karpenter IAM role for service account"
-  iam_policy_name          = "KarpenterIRSA-${var.eks_cluster_name}"
+  iam_policy_name          = "KarpenterIRSA-${data.aws_eks_cluster.eks_cluster.id}"
   iam_policy_description   = "Karpenter IAM role for service account"
 
   tags = var.tags
+}
+
+resource "helm_release" "karpenter_crd" {
+  name             = "karpenter-crd"
+  namespace        = "karpenter"
+  create_namespace = true
+
+  repository = "oci://public.ecr.aws/karpenter"
+  chart      = "karpenter-crd"
+  version    = "1.8.2"
 }
 
 resource "helm_release" "karpenter" {
@@ -396,22 +403,25 @@ resource "helm_release" "karpenter" {
   name       = "karpenter"
   repository = "oci://public.ecr.aws/karpenter"
   chart      = "karpenter"
-  version    = "1.4.0"
+  version    = "1.8.2"
 
   values = [
     yamlencode({
       settings = {
-        clusterName            = var.eks_cluster_name
-        clusterEndpoint        = data.aws_eks_cluster.eks_cluster.endpoint
-        defaultInstanceProfile = module.karpenter.instance_profile_name
-        interruptionQueueName  = module.karpenter.queue_name
+        clusterName       = data.aws_eks_cluster.eks_cluster.id
+        clusterEndpoint   = data.aws_eks_cluster.eks_cluster.endpoint
+        interruptionQueue = module.karpenter.queue_name
       }
       serviceAccount = {
-        annotations = {
-          "eks.amazonaws.com/role-arn" = module.karpenter.iam_role_arn
-        }
+        create = true
+        name   = "karpenter"
       }
     })
+  ]
+
+  depends_on = [
+    helm_release.karpenter_crd,
+    module.karpenter,
   ]
 }
 
