@@ -4,7 +4,6 @@ data "aws_eks_cluster" "eks_cluster" {
   name = var.eks_cluster_name
 }
 
-
 ##############################################
 ### AWS Load Balancer Controller
 ##############################################
@@ -74,7 +73,6 @@ resource "helm_release" "alb_ingress_controller" {
   ]
 }
 
-
 ##############################################
 ### Kubernetes ExternalDNS
 ##############################################
@@ -131,7 +129,6 @@ resource "aws_iam_role_policy_attachment" "aws_external_dns_policy_attach" {
   policy_arn = aws_iam_policy.aws_external_dns_policy.arn
 }
 
-
 resource "kubernetes_service_account" "aws_external_dns_sa" {
   metadata {
     name      = "external-dns"
@@ -170,11 +167,9 @@ resource "helm_release" "external_dns" {
   ]
 }
 
-
 ##############################################
 ### AWS for fluent bit
 ##############################################
-
 
 resource "aws_iam_role" "aws_for_fluent_bit_role" {
   count = var.enable_logs ? 1 : 0
@@ -241,7 +236,7 @@ resource "kubernetes_service_account" "aws_for_fluent_bit_sa" {
 resource "aws_cloudwatch_log_group" "aws_for_fluent_bit_log_group" {
   count             = var.enable_logs ? 1 : 0
   name              = "/aws/eks/${var.eks_cluster_name}/logs"
-  retention_in_days = 90
+  retention_in_days = var.log_retention_in_days
   tags              = var.tags
 }
 
@@ -269,7 +264,6 @@ resource "helm_release" "aws_for_fluent_bit" {
     })
   ]
 }
-
 
 ##############################################
 ### AWS Cloudwatch metrics
@@ -338,7 +332,6 @@ resource "helm_release" "aws_cloudwatch_metrics" {
   ]
 }
 
-
 ##############################################
 ### Kubernetes Metrics Server
 ##############################################
@@ -350,7 +343,6 @@ resource "helm_release" "metrics_server" {
   chart      = "metrics-server"
   version    = "3.13.0"
 }
-
 
 ##############################################
 ### Karpenter
@@ -390,13 +382,12 @@ module "karpenter" {
 }
 
 resource "helm_release" "karpenter" {
+  name             = "karpenter"
   namespace        = "karpenter"
   create_namespace = true
-
-  name       = "karpenter"
-  repository = "oci://public.ecr.aws/karpenter"
-  chart      = "karpenter"
-  version    = "1.4.0"
+  repository       = "oci://public.ecr.aws/karpenter"
+  chart            = "karpenter"
+  version          = "1.4.0"
 
   values = [
     yamlencode({
