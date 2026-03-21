@@ -387,7 +387,7 @@ resource "helm_release" "karpenter" {
   create_namespace = true
   repository       = "oci://public.ecr.aws/karpenter"
   chart            = "karpenter"
-  version          = "1.5.6"
+  version          = "1.10.0"
 
   values = [
     yamlencode({
