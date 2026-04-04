@@ -246,7 +246,7 @@ resource "helm_release" "aws_for_fluent_bit" {
   namespace  = "kube-system"
   repository = "https://aws.github.io/eks-charts"
   chart      = "aws-for-fluent-bit"
-  version    = "0.1.35"
+  version    = "0.2.0"
 
   values = [
     yamlencode({
