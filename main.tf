@@ -378,7 +378,46 @@ module "karpenter" {
   iam_policy_name          = "KarpenterIRSA-${var.eks_cluster_name}"
   iam_policy_description   = "Karpenter IAM role for service account"
 
+  # Permissions required by Karpenter >= 1.7 that the 20.x submodule does not
+  # include yet (they are part of the 21.x policy).
+  iam_policy_statements = [
+    {
+      sid = "AllowKarpenter1xRegionalReadActions"
+      actions = [
+        "ec2:DescribeCapacityReservations",
+        "ec2:DescribeInstanceStatus",
+        "ec2:DescribePlacementGroups",
+      ]
+      resources = ["*"]
+      conditions = [{
+        test     = "StringEquals"
+        variable = "aws:RequestedRegion"
+        values   = [data.aws_region.current.name]
+      }]
+    },
+    {
+      sid       = "AllowUnscopedInstanceProfileListAction"
+      actions   = ["iam:ListInstanceProfiles"]
+      resources = ["*"]
+    },
+  ]
+
   tags = var.tags
+}
+
+# CRDs are managed by their own chart: Helm never upgrades the CRDs shipped in
+# the karpenter chart's crds/ directory, so they would stay at the version
+# they were first installed with.
+resource "helm_release" "karpenter_crd" {
+  name             = "karpenter-crd"
+  namespace        = "karpenter"
+  create_namespace = true
+  repository       = "oci://public.ecr.aws/karpenter"
+  chart            = "karpenter-crd"
+  version          = "1.14.1"
+
+  # Adopt the CRDs installed by the karpenter chart on first install
+  take_ownership = true
 }
 
 resource "helm_release" "karpenter" {
@@ -387,15 +426,15 @@ resource "helm_release" "karpenter" {
   create_namespace = true
   repository       = "oci://public.ecr.aws/karpenter"
   chart            = "karpenter"
-  version          = "1.5.6"
+  version          = "1.14.1"
+  skip_crds        = true
 
   values = [
     yamlencode({
       settings = {
-        clusterName            = var.eks_cluster_name
-        clusterEndpoint        = data.aws_eks_cluster.eks_cluster.endpoint
-        defaultInstanceProfile = module.karpenter.instance_profile_name
-        interruptionQueueName  = module.karpenter.queue_name
+        clusterName       = var.eks_cluster_name
+        clusterEndpoint   = data.aws_eks_cluster.eks_cluster.endpoint
+        interruptionQueue = module.karpenter.queue_name
       }
       serviceAccount = {
         annotations = {
@@ -404,6 +443,8 @@ resource "helm_release" "karpenter" {
       }
     })
   ]
+
+  depends_on = [helm_release.karpenter_crd]
 }
 
 resource "kubectl_manifest" "karpenter_nodeclass_default" {

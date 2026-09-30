@@ -28,7 +28,7 @@ This Terraform module installs and configures a curated set of **production-read
 | **Metrics Server**                                      | `3.13.0` | Exposes CPU / memory metrics needed by the HPA.                            |
 | **AWS for Fluent Bit** (Container Insights Logs)        | `0.1.35` | Ships container logs to CloudWatch Logs (optional, see `enable_logs`).     |
 | **AWS CloudWatch Metrics** (Container Insights Metrics) | `0.0.11` | Publishes node/pod metrics to CloudWatch (optional, see `enable_metrics`). |
-| **Karpenter**                                           | `1.4.0`  | On-demand and spot node provisioning / consolidation.                      |
+| **Karpenter**                                           | `1.14.1` | On-demand and spot node provisioning / consolidation.                      |
 
 ### Kubernetes Manifests (applied via kubectl)
 
