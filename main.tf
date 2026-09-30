@@ -379,29 +379,43 @@ module "karpenter" {
   iam_policy_description   = "Karpenter IAM role for service account"
 
   # Permissions required by Karpenter >= 1.7 that the 20.x submodule does not
-  # include yet (they are part of the 21.x policy).
-  iam_policy_statements = [
-    {
-      sid = "AllowKarpenter1xRegionalReadActions"
-      actions = [
-        "ec2:DescribeCapacityReservations",
-        "ec2:DescribeInstanceStatus",
-        "ec2:DescribePlacementGroups",
-      ]
-      resources = ["*"]
-      conditions = [{
-        test     = "StringEquals"
-        variable = "aws:RequestedRegion"
-        values   = [data.aws_region.current.name]
-      }]
-    },
-    {
-      sid       = "AllowUnscopedInstanceProfileListAction"
-      actions   = ["iam:ListInstanceProfiles"]
-      resources = ["*"]
-    },
-  ]
+  # include yet (they are part of the 21.x policy). They live in a separate
+  # policy because the submodule's policy is already close to the IAM managed
+  # policy size quota (6144 characters).
+  iam_role_policies = {
+    Karpenter1x = aws_iam_policy.karpenter_1x.arn
+  }
 
+  tags = var.tags
+}
+
+resource "aws_iam_policy" "karpenter_1x" {
+  name        = "KarpenterIRSA-${var.eks_cluster_name}-1x"
+  description = "Karpenter >= 1.7 permissions missing from the 20.x karpenter submodule"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowKarpenter1xRegionalReadActions"
+        Effect = "Allow"
+        Action = [
+          "ec2:DescribeCapacityReservations",
+          "ec2:DescribeInstanceStatus",
+          "ec2:DescribePlacementGroups",
+        ]
+        Resource = "*"
+        Condition = {
+          StringEquals = { "aws:RequestedRegion" = data.aws_region.current.name }
+        }
+      },
+      {
+        Sid      = "AllowUnscopedInstanceProfileListAction"
+        Effect   = "Allow"
+        Action   = "iam:ListInstanceProfiles"
+        Resource = "*"
+      },
+    ]
+  })
   tags = var.tags
 }
 
